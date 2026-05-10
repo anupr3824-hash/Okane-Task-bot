@@ -224,46 +224,64 @@ ${user.referrals.length}`
     );
   });
 
-  // SPIN
-  bot.action("spin", async (ctx) => {
+  // ADVANCED SPIN
+bot.action(
+  "spin",
+  async (ctx) => {
 
   const user =
   await User.findOne({
     userId: ctx.from.id
   });
 
+  await ctx.answerCbQuery();
+
+  // DEFAULT VALUES
+  if (!user.spins)
+    user.spins = 3;
+
+  if (!user.lastSpin)
+    user.lastSpin = 0;
+
+  // COOLDOWN
+  const cooldown =
+  60 * 60 * 1000;
+
   const now = Date.now();
 
-  const cooldown =
-  24 * 60 * 60 * 1000;
-
-  // CHECK COOLDOWN
+  // RESET DAILY SPINS
   if (
-    now - user.spinTime <
+    now - user.lastSpin >
     cooldown
   ) {
 
-    const remaining =
-    cooldown -
-    (now - user.spinTime);
+    user.spins = 3;
+  }
 
-    const hours =
-    Math.floor(
-      remaining /
-      (1000 * 60 * 60)
-    );
+  // NO SPINS
+  if (user.spins <= 0) {
 
     return ctx.reply(
-`⏳ You already used spin.
+`❌ No Spins Left
 
-Come back in ${hours} hours`
+⏳ Come back later
+or invite friends`
     );
   }
 
-  const rewards =
-[1, 3, 4, 6, 9];
+  // REWARDS
+  const rewards = [
+    1,
+    3,
+    4,
+    6,
+    9,
+    15,
+    25
+  ];
 
-  const random =
+  // RANDOM
+  const reward =
   rewards[
     Math.floor(
       Math.random() *
@@ -271,16 +289,35 @@ Come back in ${hours} hours`
     )
   ];
 
-  user.balance += random;
+  // JACKPOT
+  let jackpotText = "";
 
-  user.spinTime = now;
+  if (reward === 25) {
+
+    jackpotText =
+"\n\n🎉 JACKPOT WIN!";
+  }
+
+  // UPDATE USER
+  user.balance += reward;
+
+  user.spins -= 1;
+
+  user.lastSpin = now;
 
   await user.save();
 
   ctx.reply(
-`🎰 Spin Result
+`🎡 SPIN RESULT
 
-You won ${random} Coins`
+🎁 Reward:
+${reward} Coins
+
+🎯 Spins Left:
+${user.spins}
+
+💰 Balance:
+${user.balance}${jackpotText}`
   );
 });
 

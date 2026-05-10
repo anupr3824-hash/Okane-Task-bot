@@ -3,24 +3,18 @@ const User = require("../models/User");
 const Withdraw = require("../models/Withdraw");
 const { Markup } = require("telegraf");
 
+const ADMIN_ID = 2002516695;
+
 const adminStep = {};
 const withdrawStep = {};
-const ADMIN_ID = 2002516695;
 
 const CHANNELS = ["@okane3"];
 
-// FORCE JOIN
 async function checkForceJoin(ctx) {
   try {
-    for (let channel of CHANNELS) {
-      const member = await ctx.telegram.getChatMember(
-        channel,
-        ctx.from.id
-      );
-
-      if (member.status === "left" || member.status === "kicked") {
-        return false;
-      }
+    for (let ch of CHANNELS) {
+      const member = await ctx.telegram.getChatMember(ch, ctx.from.id);
+      if (member.status === "left") return false;
     }
     return true;
   } catch {
@@ -33,59 +27,35 @@ function handleCommands(bot) {
   // START
   bot.start(async (ctx) => {
 
-    const joined = await checkForceJoin(ctx);
-    if (!joined) {
-      return ctx.reply(`❌ Join All Channels First\n${CHANNELS.join("\n")}`);
+    if (!(await checkForceJoin(ctx))) {
+      return ctx.reply("❌ Join Channel First");
     }
 
     let user = await User.findOne({ userId: ctx.from.id });
 
     if (!user) {
-      user = new User({
+      user = await User.create({
         userId: ctx.from.id,
-        username: ctx.from.username
+        username: ctx.from.username,
+        balance: 0,
+        spins: 3,
+        referrals: [],
+        completedTasks: [],
+        vip: false
       });
-
-      const payload = ctx.startPayload;
-
-      if (payload && payload !== String(ctx.from.id)) {
-        const referrer = await User.findOne({
-          userId: Number(payload)
-        });
-
-        if (referrer && !referrer.referrals.includes(ctx.from.id)) {
-          referrer.referrals.push(ctx.from.id);
-          referrer.balance += 10;
-          referrer.spins = (referrer.spins || 0) + 1;
-
-          await referrer.save();
-          user.referredBy = referrer.userId;
-        }
-      }
-
-      await user.save();
     }
 
-    ctx.reply(
-      `🎉 Welcome ${ctx.from.first_name}`,
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback("💰 Balance", "balance"),
-          Markup.button.callback("👥 Refer", "refer")
-        ],
-        [
-          Markup.button.callback("🎁 Bonus", "bonus"),
-          Markup.button.callback("🎰 Spin", "spin")
-        ],
-        [
-          Markup.button.callback("📋 Tasks", "tasks"),
-          Markup.button.callback("💸 Withdraw", "withdraw")
-        ]
-      ])
-    );
+    ctx.reply("🎉 Welcome", Markup.inlineKeyboard([
+      [Markup.button.callback("💰 Balance", "balance")],
+      [Markup.button.callback("🎰 Spin", "spin")],
+      [Markup.button.callback("🎁 Bonus", "bonus")],
+      [Markup.button.callback("📋 Tasks", "tasks")],
+      [Markup.button.callback("🏆 Leaderboard", "leaderboard")],
+      [Markup.button.callback("💸 Withdraw", "withdraw")]
+    ]));
   });
 
-  // TEXT HANDLER (ADMIN + WITHDRAW)
+  // TEXT HANDLER
   bot.on("text", async (ctx) => {
 
     const step = adminStep[ctx.from.id];
@@ -96,14 +66,10 @@ function handleCommands(bot) {
       if (step === "task") {
         const [title, channel, reward] = ctx.message.text.split("|");
 
-        if (!title || !channel || !reward) {
-          return ctx.reply("❌ Format: Title | @channel | reward");
-        }
-
         await Task.create({
           title: title.trim(),
           channel: channel.trim(),
-          reward: Number(reward.trim())
+          reward: Number(reward)
         });
 
         adminStep[ctx.from.id] = null;
@@ -113,16 +79,15 @@ function handleCommands(bot) {
       if (step === "broadcast") {
         const users = await User.find();
 
-        for (const user of users) {
+        for (const u of users) {
           try {
-            await ctx.telegram.sendMessage(user.userId, ctx.message.text);
+            await ctx.telegram.sendMessage(u.userId, ctx.message.text);
           } catch {}
         }
 
         adminStep[ctx.from.id] = null;
         return ctx.reply("✅ Broadcast Sent");
       }
-
     }
 
     // WITHDRAW FLOW
@@ -138,14 +103,10 @@ function handleCommands(bot) {
     if (data.step === "amount") {
       const amount = Number(ctx.message.text);
 
-      if (isNaN(amount) || amount <= 0) {
-        return ctx.reply("❌ Invalid Amount");
-      }
-
       const user = await User.findOne({ userId: ctx.from.id });
 
       if (amount > user.balance) {
-        return ctx.reply(`❌ Insufficient Balance\n💰 ${user.balance}`);
+        return ctx.reply("❌ Low balance");
       }
 
       await Withdraw.create({
@@ -167,44 +128,56 @@ function handleCommands(bot) {
   // BALANCE
   bot.action("balance", async (ctx) => {
     const user = await User.findOne({ userId: ctx.from.id });
-    await ctx.answerCbQuery();
     ctx.reply(`💰 Balance: ${user.balance}`);
   });
 
-  // REFER
-  bot.action("refer", async (ctx) => {
-    const me = await ctx.telegram.getMe();
-    const link = `https://t.me/${me.username}?start=${ctx.from.id}`;
-
+  // SPIN
+  bot.action("spin", async (ctx) => {
     const user = await User.findOne({ userId: ctx.from.id });
 
-    await ctx.answerCbQuery();
-    ctx.reply(`👥 Link:\n${link}\nReferrals: ${user.referrals.length}`);
+    if (!user.spins) user.spins = 3;
+
+    if (user.spins <= 0) {
+      return ctx.reply("❌ No spins left");
+    }
+
+    const rewards = [5, 10, 20, 50];
+    const reward = rewards[Math.floor(Math.random() * rewards.length)];
+
+    user.balance += reward;
+    user.spins -= 1;
+
+    await user.save();
+
+    ctx.reply(`🎰 Spinning...\n🎉 You got ${reward} coins`);
   });
 
   // BONUS
   bot.action("bonus", async (ctx) => {
     const user = await User.findOne({ userId: ctx.from.id });
 
-    user.balance += 5;
+    const now = Date.now();
+    if (user.lastBonus && now - user.lastBonus < 86400000) {
+      return ctx.reply("⏳ Already claimed");
+    }
+
+    user.balance += 10;
+    user.lastBonus = now;
+
     await user.save();
 
-    ctx.reply("🎁 5 Coins Added");
+    ctx.reply("🎁 10 coins added");
   });
 
   // TASKS
   bot.action("tasks", async (ctx) => {
     const tasks = await Task.find();
 
-    if (tasks.length < 1) {
-      return ctx.reply("❌ No Tasks");
-    }
-
     for (const t of tasks) {
       await ctx.reply(
-        `📋 ${t.title}\n💰 ${t.reward}`,
+        `${t.title} - ${t.reward}`,
         Markup.inlineKeyboard([
-          [Markup.button.url("Join", `https://t.me/${t.channel.replace("@", "")}`)],
+          [Markup.button.url("Join", `https://t.me/${t.channel.replace("@","")}`)],
           [Markup.button.callback("Verify", `verify_${t._id}`)]
         ])
       );
@@ -213,44 +186,36 @@ function handleCommands(bot) {
 
   // VERIFY
   bot.action(/verify_(.+)/, async (ctx) => {
-    const taskId = ctx.match[1];
-
-    const task = await Task.findById(taskId);
+    const task = await Task.findById(ctx.match[1]);
     const user = await User.findOne({ userId: ctx.from.id });
 
-    if (user.completedTasks.includes(taskId)) {
-      return ctx.answerCbQuery("Already Done");
+    if (user.completedTasks.includes(task._id)) {
+      return ctx.reply("❌ Already done");
     }
 
-    try {
-      const member = await ctx.telegram.getChatMember(
-        task.channel,
-        ctx.from.id
-      );
+    user.balance += task.reward;
+    user.completedTasks.push(task._id);
 
-      if (member.status === "left") {
-        return ctx.answerCbQuery("Join Channel First");
-      }
+    await user.save();
 
-      user.balance += task.reward;
-      user.completedTasks.push(taskId);
+    ctx.reply("✅ Task done");
+  });
 
-      await user.save();
+  // LEADERBOARD
+  bot.action("leaderboard", async (ctx) => {
+    const users = await User.find().sort({ balance: -1 }).limit(5);
 
-      ctx.reply(`✅ Done\n💰 ${task.reward}`);
-    } catch {
-      ctx.reply("❌ Error");
-    }
+    let text = "🏆 Leaderboard\n\n";
+
+    users.forEach((u, i) => {
+      text += `${i+1}. ${u.username} - ${u.balance}\n`;
+    });
+
+    ctx.reply(text);
   });
 
   // WITHDRAW
   bot.action("withdraw", async (ctx) => {
-    const user = await User.findOne({ userId: ctx.from.id });
-
-    if (user.balance < 100) {
-      return ctx.reply("❌ Min 100");
-    }
-
     withdrawStep[ctx.from.id] = { step: "upi" };
     ctx.reply("Send UPI");
   });
@@ -260,11 +225,10 @@ function handleCommands(bot) {
 
     if (ctx.from.id !== ADMIN_ID) return;
 
-    const totalUsers = await User.countDocuments();
-    const totalWithdraws = await Withdraw.countDocuments();
+    const users = await User.countDocuments();
 
     ctx.reply(
-      `👑 ADMIN PANEL\nUsers: ${totalUsers}\nWithdraws: ${totalWithdraws}`,
+      `👑 Admin Panel\nUsers: ${users}`,
       Markup.inlineKeyboard([
         [Markup.button.callback("Add Task", "admin_task")],
         [Markup.button.callback("Broadcast", "admin_broadcast")]
@@ -272,18 +236,16 @@ function handleCommands(bot) {
     );
   });
 
-  bot.action("admin_task", async (ctx) => {
+  bot.action("admin_task", (ctx) => {
     adminStep[ctx.from.id] = "task";
-    ctx.reply("Send: Title | @channel | reward");
+    ctx.reply("Send: title|@channel|reward");
   });
 
-  bot.action("admin_broadcast", async (ctx) => {
+  bot.action("admin_broadcast", (ctx) => {
     adminStep[ctx.from.id] = "broadcast";
     ctx.reply("Send message");
   });
 
 }
 
-module.exports = {
-  handleCommands
-};
+module.exports = { handleCommands };

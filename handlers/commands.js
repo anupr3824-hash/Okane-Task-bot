@@ -451,6 +451,7 @@ ${user.balance}`
 
   // WITHDRAW STEP STORAGE
 const withdrawStep = {};
+const adminStep = {};
 
 
 // WITHDRAW BUTTON
@@ -494,6 +495,149 @@ anup@paytm`
 bot.on(
   "text",
   async (ctx) => {
+
+  // ADMIN ACTIONS
+if (
+  ctx.from.id === ADMIN_ID
+) {
+
+  const step =
+  adminStep[
+    ctx.from.id
+  ];
+
+  // ADD BALANCE
+  if (
+    step === "balance"
+  ) {
+
+    const split =
+    ctx.message.text.split(" ");
+
+    if (
+      split.length < 2
+    ) {
+
+      return ctx.reply(
+        "❌ Wrong Format"
+      );
+    }
+
+    const userId =
+    Number(split[0]);
+
+    const amount =
+    Number(split[1]);
+
+    const user =
+    await User.findOne({
+      userId
+    });
+
+    if (!user) {
+
+      return ctx.reply(
+        "❌ User Not Found"
+      );
+    }
+
+    user.balance += amount;
+
+    await user.save();
+
+    delete adminStep[
+      ctx.from.id
+    ];
+
+    return ctx.reply(
+
+`✅ Balance Added
+
+👤 User:
+${userId}
+
+💰 Amount:
+${amount}`
+    );
+  }
+
+  // ADD TASK
+  if (
+    step === "task"
+  ) {
+
+    const split =
+    ctx.message.text.split("|");
+
+    if (
+      split.length < 3
+    ) {
+
+      return ctx.reply(
+        "❌ Wrong Format"
+      );
+    }
+
+    const title =
+    split[0].trim();
+
+    const channel =
+    split[1].trim();
+
+    const reward =
+    Number(
+      split[2]
+    );
+
+    await Task.create({
+
+      title,
+      channel,
+      reward
+
+    });
+
+    delete adminStep[
+      ctx.from.id
+    ];
+
+    return ctx.reply(
+      "✅ Task Added"
+    );
+  }
+
+  // BROADCAST
+  if (
+    step ===
+    "broadcast"
+  ) {
+
+    const users =
+    await User.find();
+
+    for (
+      const user of users
+    ) {
+
+      try {
+
+        await ctx.telegram.sendMessage(
+          user.userId,
+          ctx.message.text
+        );
+
+      } catch {}
+    }
+
+    delete adminStep[
+      ctx.from.id
+    ];
+
+    return ctx.reply(
+      "✅ Broadcast Sent"
+    );
+  }
+}
 
   const data =
   withdrawStep[
@@ -620,35 +764,181 @@ ${amount}`
   }
 });
 
-  // ADMIN
-  bot.command("admin", async (ctx) => {
+  // ADMIN PANEL
+bot.command(
+  "admin",
+  async (ctx) => {
 
-    if (
-      ctx.from.id !== ADMIN_ID
-    ) {
-      return;
-    }
+  if (
+    ctx.from.id !== ADMIN_ID
+  ) return;
 
-    const totalUsers =
-    await User.countDocuments();
+  const totalUsers =
+  await User.countDocuments();
 
-    ctx.reply(
-`👑 ADMIN PANEL
+  const totalWithdraws =
+  await Withdraw.countDocuments();
 
-👥 Users:
-${totalUsers}`,
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback(
-            "📢 Broadcast",
-            "broadcast"
-          )
-        ]
-      ])
+  ctx.reply(
+
+`👑 MODERN ADMIN PANEL
+
+👥 Total Users:
+${totalUsers}
+
+💸 Withdraw Requests:
+${totalWithdraws}`,
+
+    Markup.inlineKeyboard([
+
+      [
+        Markup.button.callback(
+          "💰 Add Balance",
+          "admin_balance"
+        )
+      ],
+
+      [
+        Markup.button.callback(
+          "📢 Broadcast",
+          "admin_broadcast"
+        )
+      ],
+
+      [
+        Markup.button.callback(
+          "📋 Add Task",
+          "admin_task"
+        )
+      ],
+
+      [
+        Markup.button.callback(
+          "💸 Withdraws",
+          "admin_withdraws"
+        )
+      ]
+
+    ])
+  );
+});
+
+// ADD BALANCE
+bot.action(
+  "admin_balance",
+  async (ctx) => {
+
+  if (
+    ctx.from.id !== ADMIN_ID
+  ) return;
+
+  adminStep[
+    ctx.from.id
+  ] = "balance";
+
+  ctx.reply(
+`💰 Send Details
+
+USER_ID AMOUNT
+
+Example:
+123456789 100`
+  );
+});
+
+// ADD TASK
+bot.action(
+  "admin_task",
+  async (ctx) => {
+
+  // ADMIN CHECK
+  if (
+    ctx.from.id !== ADMIN_ID
+  ) return;
+
+  // SAVE STEP
+  adminStep[
+    ctx.from.id
+  ] = "task";
+
+  ctx.reply(
+`📋 Send Task Details
+
+TITLE | CHANNEL | REWARD
+
+Example:
+Join Main Channel | @okane3 | 10`
+  );
+});
+
+// BROADCAST
+bot.action(
+  "admin_broadcast",
+  async (ctx) => {
+
+  // ADMIN CHECK
+  if (
+    ctx.from.id !== ADMIN_ID
+  ) return;
+
+  // SAVE STEP
+  adminStep[
+    ctx.from.id
+  ] = "broadcast";
+
+  ctx.reply(
+`📢 Send Broadcast Message`
+  );
+});
+
+// VIEW WITHDRAWS
+bot.action(
+  "admin_withdraws",
+  async (ctx) => {
+
+  // ADMIN CHECK
+  if (
+    ctx.from.id !== ADMIN_ID
+  ) return;
+
+  // GET WITHDRAWS
+  const withdraws =
+  await Withdraw.find()
+  .sort({
+    createdAt: -1
+  })
+  .limit(10);
+
+  // EMPTY CHECK
+  if (
+    withdraws.length < 1
+  ) {
+
+    return ctx.reply(
+      "❌ No Withdraw Requests"
     );
-  });
+  }
 
-}
+  // SHOW LIST
+  for (
+    const w of withdraws
+  ) {
+
+    await ctx.reply(
+
+`💸 Withdraw Request
+
+👤 User ID:
+${w.userId}
+
+🏦 UPI:
+${w.upi}
+
+💰 Amount:
+${w.amount}`
+    );
+  }
+});
 
 module.exports = {
   handleCommands,

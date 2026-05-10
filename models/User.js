@@ -11,6 +11,11 @@ const userSchema = new mongoose.Schema({
     default: 0
   },
 
+  completedTasks: {
+   type: Array,
+   default: []
+  },
+
   referrals: {
     type: Array,
     default: []

@@ -1,3 +1,4 @@
+const Task = require("../models/Task");
 const User = require("../models/User");
 const Withdraw = require("../models/Withdraw");
 const { Markup } = require("telegraf");
@@ -321,19 +322,132 @@ ${user.balance}${jackpotText}`
   );
 });
 
-  // TASKS
-  bot.action("tasks", async (ctx) => {
+  // TASKS BUTTON
+bot.action(
+  "tasks",
+  async (ctx) => {
+
+  const tasks =
+  await Task.find();
+
+  if (tasks.length < 1) {
+
+    return ctx.reply(
+      "❌ No Tasks Available"
+    );
+  }
+
+  for (const task of tasks) {
+
+    await ctx.reply(
+
+`📋 ${task.title}
+
+🎁 Reward:
+${task.reward} Coins`,
+
+      Markup.inlineKeyboard([
+
+        [
+          Markup.button.url(
+            "📢 Join Channel",
+            `https://t.me/${task.channel.replace("@","")}`
+          )
+        ],
+
+        [
+          Markup.button.callback(
+            "✅ Verify",
+            `verify_${task._id}`
+          )
+        ]
+
+      ])
+    );
+  }
+});
+
+
+// VERIFY TASK
+bot.action(
+/verify_(.+)/,
+async (ctx) => {
+
+  const taskId =
+  ctx.match[1];
+
+  const task =
+  await Task.findById(
+    taskId
+  );
+
+  const user =
+  await User.findOne({
+    userId: ctx.from.id
+  });
+
+  // ALREADY CLAIMED
+  if (
+    user.completedTasks.includes(
+      taskId
+    )
+  ) {
+
+    return ctx.answerCbQuery(
+      "❌ Already Claimed"
+    );
+  }
+
+  try {
+
+    // CHECK CHANNEL JOIN
+    const member =
+    await ctx.telegram.getChatMember(
+
+      task.channel,
+
+      ctx.from.id
+
+    );
+
+    if (
+      member.status ===
+      "left"
+    ) {
+
+      return ctx.answerCbQuery(
+        "❌ Join Channel First"
+      );
+    }
+
+    // GIVE REWARD
+    user.balance +=
+    task.reward;
+
+    // SAVE CLAIM
+    user.completedTasks.push(
+      taskId
+    );
+
+    await user.save();
 
     ctx.reply(
-`📋 Tasks:
+`✅ Task Completed
 
-1. Join Channel
-Reward: 10 Coins
+🎁 Reward:
+${task.reward} Coins
 
-2. Invite 5 Users
-Reward: 50 Coins`
+💰 Balance:
+${user.balance}`
     );
-  });
+
+  } catch {
+
+    ctx.reply(
+      "❌ Verification Failed"
+    );
+  }
+});
 
   // WITHDRAW STEP STORAGE
 const withdrawStep = {};

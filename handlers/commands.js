@@ -298,8 +298,12 @@ Reward: 50 Coins`
     );
   });
 
-  // WITHDRAW
-  bot.action(
+  // WITHDRAW STEP STORAGE
+const withdrawStep = {};
+
+
+// WITHDRAW BUTTON
+bot.action(
   "withdraw",
   async (ctx) => {
 
@@ -308,6 +312,9 @@ Reward: 50 Coins`
     userId: ctx.from.id
   });
 
+  await ctx.answerCbQuery();
+
+  // MIN BALANCE
   if (user.balance < 100) {
 
     return ctx.reply(
@@ -316,99 +323,150 @@ Reward: 50 Coins`
     );
   }
 
+  // CREATE USER SESSION
+  withdrawStep[
+    ctx.from.id
+  ] = {
+    step: "upi"
+  };
+
   ctx.reply(
-`💸 Send Withdraw Format
+`🏦 Send Your UPI ID
 
 Example:
-upi@paytm 100`
+anup@paytm`
   );
+});
 
-  bot.once("text", async (ctx2) => {
 
-    try {
+// HANDLE TEXT
+bot.on(
+  "text",
+  async (ctx) => {
 
-      const text =
-      ctx2.message.text;
+  const data =
+  withdrawStep[
+    ctx.from.id
+  ];
 
-      const split =
-      text.split(" ");
+  // NO ACTIVE WITHDRAW
+  if (!data) return;
 
-      if (split.length < 2)
-        return;
+  const text =
+  ctx.message.text;
 
-      const upi = split[0];
+  // STEP 1 => UPI
+  if (
+    data.step === "upi"
+  ) {
 
-      const amount =
-      Number(split[1]);
+    // SAVE UPI
+    data.upi = text;
 
-      const user2 =
-      await User.findOne({
-        userId: ctx2.from.id
-      });
+    // NEXT STEP
+    data.step = "amount";
 
-      if (
-        amount > user2.balance
-      ) {
+    return ctx.reply(
+`💰 Enter Withdraw Amount`
+    );
+  }
 
-        return ctx2.reply(
-          "❌ Insufficient Balance"
-        );
-      }
+  // STEP 2 => AMOUNT
+  if (
+    data.step === "amount"
+  ) {
 
-      // SAVE REQUEST
-      const request =
-      new Withdraw({
+    const amount =
+    Number(text);
 
-        userId:
-        ctx2.from.id,
+    // INVALID AMOUNT
+    if (
+      isNaN(amount) ||
+      amount <= 0
+    ) {
 
-        amount,
+      return ctx.reply(
+        "❌ Invalid Amount"
+      );
+    }
 
-        upi
+    const user =
+    await User.findOne({
+      userId: ctx.from.id
+    });
 
-      });
+    // BALANCE CHECK
+    if (
+      amount > user.balance
+    ) {
 
-      await request.save();
+      return ctx.reply(
+`❌ Insufficient Balance
 
-      // DEDUCT BALANCE
-      user2.balance -= amount;
+💰 Balance:
+${user.balance}`
+      );
+    }
 
-      await user2.save();
+    // SAVE REQUEST
+    const request =
+    new Withdraw({
 
-      // ADMIN MESSAGE
-      await ctx.telegram.sendMessage(
-        ADMIN_ID,
+      userId:
+      ctx.from.id,
 
-`💸 New Withdraw Request
+      amount,
 
-👤 User:
-${ctx2.from.first_name}
+      upi:
+      data.upi
 
-🆔 ID:
-${ctx2.from.id}
+    });
+
+    await request.save();
+
+    // DEDUCT BALANCE
+    user.balance -= amount;
+
+    await user.save();
+
+    // SUCCESS MESSAGE
+    await ctx.reply(
+`✅ Withdraw Request Sent
+
+🏦 UPI:
+${data.upi}
 
 💰 Amount:
 ${amount}
 
-🏦 UPI:
-${upi}`
-      );
-
-      ctx2.reply(
-`✅ Withdraw Request Sent
-
 ⏳ Wait For Admin Approval`
-      );
+    );
 
-    } catch (err) {
+    // ADMIN MESSAGE
+    await ctx.telegram.sendMessage(
 
-      console.log(err);
+      ADMIN_ID,
 
-      ctx2.reply(
-        "❌ Withdraw Failed"
-      );
-    }
-  });
+`💸 NEW WITHDRAW REQUEST
+
+👤 User:
+${ctx.from.first_name}
+
+🆔 User ID:
+${ctx.from.id}
+
+🏦 UPI:
+${data.upi}
+
+💰 Amount:
+${amount}`
+    );
+
+    // REMOVE SESSION
+    delete withdrawStep[
+      ctx.from.id
+    ];
+  }
 });
 
   // ADMIN

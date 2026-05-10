@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Withdraw = require("../models/Withdraw");
 const { Markup } = require("telegraf");
 
+const adminStep = {};
 const ADMIN_ID = 2002516695;
 
 const CHANNELS = [
@@ -148,6 +149,47 @@ ${CHANNELS.join("\n")}`
       ])
     );
   });
+
+bot.on("text", async (ctx) => {
+
+  // 👉 TASK ADD SYSTEM
+  if (adminStep[ctx.from.id] === "task") {
+
+    const [title, channel, reward] = ctx.message.text.split("|");
+
+    if (!title || !channel || !reward) {
+      return ctx.reply("❌ Format galat hai\nExample:\nJoin Channel | @abc | 10");
+    }
+
+    await Task.create({
+      title: title.trim(),
+      channel: channel.trim(),
+      reward: Number(reward.trim())
+    });
+
+    adminStep[ctx.from.id] = null;
+
+    return ctx.reply("✅ Task Added Successfully");
+  }
+
+});
+
+bot.command("tasks", async (ctx) => {
+
+  const tasks = await Task.find();
+
+  if (tasks.length < 1) {
+    return ctx.reply("❌ No Tasks Available");
+  }
+
+  for (const t of tasks) {
+    await ctx.reply(`📋 ${t.title}
+
+🔗 ${t.channel}
+💰 Reward: ${t.reward}`);
+  }
+
+});
 
   // BALANCE
   bot.action("balance", async (ctx) => {
@@ -492,119 +534,32 @@ anup@paytm`
 
 
 // HANDLE TEXT
-bot.on(
-  "text",
-  async (ctx) => {
+bot.on("text", async (ctx) => {
 
-  // ADMIN ACTIONS
-if (
-  ctx.from.id === ADMIN_ID
-) {
+  if (ctx.from.id !== ADMIN_ID) return;
 
-  const step =
-  adminStep[
-    ctx.from.id
-  ];
+  const step = adminStep[ctx.from.id];
 
-  // ADD BALANCE
-  if (
-    step === "balance"
-  ) {
+  if (step === "task") {
 
-    const split =
-    ctx.message.text.split(" ");
+    const [title, channel, reward] = ctx.message.text.split("|");
 
-    if (
-      split.length < 2
-    ) {
-
-      return ctx.reply(
-        "❌ Wrong Format"
-      );
+    if (!title || !channel || !reward) {
+      return ctx.reply("❌ Format wrong\nUse:\nTitle | @channel | reward");
     }
-
-    const userId =
-    Number(split[0]);
-
-    const amount =
-    Number(split[1]);
-
-    const user =
-    await User.findOne({
-      userId
-    });
-
-    if (!user) {
-
-      return ctx.reply(
-        "❌ User Not Found"
-      );
-    }
-
-    user.balance += amount;
-
-    await user.save();
-
-    delete adminStep[
-      ctx.from.id
-    ];
-
-    return ctx.reply(
-
-`✅ Balance Added
-
-👤 User:
-${userId}
-
-💰 Amount:
-${amount}`
-    );
-  }
-
-  // ADD TASK
-  if (
-    step === "task"
-  ) {
-
-    const split =
-    ctx.message.text.split("|");
-
-    if (
-      split.length < 3
-    ) {
-
-      return ctx.reply(
-        "❌ Wrong Format"
-      );
-    }
-
-    const title =
-    split[0].trim();
-
-    const channel =
-    split[1].trim();
-
-    const reward =
-    Number(
-      split[2]
-    );
 
     await Task.create({
-
-      title,
-      channel,
-      reward
-
+      title: title.trim(),
+      channel: channel.trim(),
+      reward: Number(reward.trim())
     });
 
-    delete adminStep[
-      ctx.from.id
-    ];
+    adminStep[ctx.from.id] = null;
 
-    return ctx.reply(
-      "✅ Task Added"
-    );
+    return ctx.reply("✅ Task Added");
   }
+
+});
 
   // BROADCAST
   if (
@@ -924,7 +879,9 @@ ${w.amount}`);
 }); // ✅ CLOSE
 
 // ✅ FINAL EXPORT
-}
+
+} // ✅ function close
+
 module.exports = {
   handleCommands,
 };

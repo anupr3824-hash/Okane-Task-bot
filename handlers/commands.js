@@ -892,41 +892,24 @@ bot.action(
 });
 
 // VIEW WITHDRAWS
-bot.action(
-  "admin_withdraws",
-  async (ctx) => {
+bot.action("admin_withdraws", async (ctx) => {
 
   // ADMIN CHECK
-  if (
-    ctx.from.id !== ADMIN_ID
-  ) return;
+  if (ctx.from.id !== ADMIN_ID) return;
 
   // GET WITHDRAWS
-  const withdraws =
-  await Withdraw.find()
-  .sort({
-    createdAt: -1
-  })
-  .limit(10);
+  const withdraws = await Withdraw.find()
+    .sort({ createdAt: -1 })
+    .limit(10);
 
   // EMPTY CHECK
-  if (
-    withdraws.length < 1
-  ) {
-
-    return ctx.reply(
-      "❌ No Withdraw Requests"
-    );
+  if (withdraws.length < 1) {
+    return ctx.reply("❌ No Withdraw Requests");
   }
 
   // SHOW LIST
-  for (
-    const w of withdraws
-  ) {
-
-    await ctx.reply(
-
-`💸 Withdraw Request
+  for (const w of withdraws) {
+    await ctx.reply(`💸 Withdraw Request
 
 👤 User ID:
 ${w.userId}
@@ -935,12 +918,12 @@ ${w.userId}
 ${w.upi}
 
 💰 Amount:
-${w.amount}`
-    );
+${w.amount}`);
   }
-});
 
+}); // ✅ IMPORTANT closing
+
+// EXPORT
 module.exports = {
   handleCommands,
 };
-

@@ -921,9 +921,10 @@ ${w.upi}
 ${w.amount}`);
   }
 
-}); // ✅ IMPORTANT closing
+}); // ✅ CLOSE
 
-// EXPORT
+// ✅ FINAL EXPORT
+}
 module.exports = {
   handleCommands,
 };

@@ -27,9 +27,14 @@ const userSchema = new mongoose.Schema({
   },
 
   spinTime: {
-    type: Number,
-    default: 0
-  }
+  type: Number,
+  default: 0
+},
+
+completedTasks: {
+  type: Array,
+  default: []
+}
 
 });
 

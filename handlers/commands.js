@@ -93,6 +93,8 @@ ${CHANNELS.join("\n")}`
 
           referrer.balance += 10;
 
+          refUser.spins = (refUser.spins || 0) + 1;
+
           await referrer.save();
 
           user.referredBy =
@@ -224,30 +226,62 @@ ${user.referrals.length}`
   // SPIN
   bot.action("spin", async (ctx) => {
 
-    const rewards =
-    [1, 5, 10, 20, 50];
-
-    const random =
-    rewards[
-      Math.floor(
-        Math.random() *
-        rewards.length
-      )
-    ];
-
-    const user =
-    await User.findOne({
-      userId: ctx.from.id
-    });
-
-    user.balance += random;
-
-    await user.save();
-
-    ctx.reply(
-`🎰 You Won ${random} Coins`
-    );
+  const user =
+  await User.findOne({
+    userId: ctx.from.id
   });
+
+  const now = Date.now();
+
+  const cooldown =
+  24 * 60 * 60 * 1000;
+
+  // CHECK COOLDOWN
+  if (
+    now - user.spinTime <
+    cooldown
+  ) {
+
+    const remaining =
+    cooldown -
+    (now - user.spinTime);
+
+    const hours =
+    Math.floor(
+      remaining /
+      (1000 * 60 * 60)
+    );
+
+    return ctx.reply(
+`⏳ You already used spin.
+
+Come back in ${hours} hours`
+    );
+  }
+
+  const rewards =
+[1, 3, 4, 6, 9];
+
+  const random =
+  rewards[
+    Math.floor(
+      Math.random() *
+      rewards.length
+    )
+  ];
+
+  user.balance += random;
+
+  user.spinTime = now;
+
+  await user.save();
+
+  ctx.reply(
+`🎰 Spin Result
+
+You won ${random} Coins`
+  );
+});
 
   // TASKS
   bot.action("tasks", async (ctx) => {
@@ -317,3 +351,4 @@ ${totalUsers}`,
 module.exports = {
   handleCommands,
 };
+

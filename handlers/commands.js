@@ -323,7 +323,7 @@ Example:
 upi@paytm 100`
   );
 
-  bot.on("text", async (ctx2) => {
+  bot.once("text", async (ctx2) => {
 
     try {
 

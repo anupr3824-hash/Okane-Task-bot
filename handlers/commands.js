@@ -1,7 +1,8 @@
 const User = require("../models/User");
+const Withdraw = require("../models/Withdraw");
 const { Markup } = require("telegraf");
 
-const ADMIN_ID = 123456789;
+const ADMIN_ID = 2002516695;
 
 const CHANNELS = [
   "@okane3"
@@ -298,25 +299,117 @@ Reward: 50 Coins`
   });
 
   // WITHDRAW
-  bot.action("withdraw", async (ctx) => {
+  bot.action(
+  "withdraw",
+  async (ctx) => {
 
-    const user =
-    await User.findOne({
-      userId: ctx.from.id
-    });
+  const user =
+  await User.findOne({
+    userId: ctx.from.id
+  });
 
-    if (user.balance < 100) {
+  if (user.balance < 100) {
 
-      return ctx.reply(
+    return ctx.reply(
 `❌ Minimum Withdraw:
 100 Coins`
+    );
+  }
+
+  ctx.reply(
+`💸 Send Withdraw Format
+
+Example:
+upi@paytm 100`
+  );
+
+  bot.on("text", async (ctx2) => {
+
+    try {
+
+      const text =
+      ctx2.message.text;
+
+      const split =
+      text.split(" ");
+
+      if (split.length < 2)
+        return;
+
+      const upi = split[0];
+
+      const amount =
+      Number(split[1]);
+
+      const user2 =
+      await User.findOne({
+        userId: ctx2.from.id
+      });
+
+      if (
+        amount > user2.balance
+      ) {
+
+        return ctx2.reply(
+          "❌ Insufficient Balance"
+        );
+      }
+
+      // SAVE REQUEST
+      const request =
+      new Withdraw({
+
+        userId:
+        ctx2.from.id,
+
+        amount,
+
+        upi
+
+      });
+
+      await request.save();
+
+      // DEDUCT BALANCE
+      user2.balance -= amount;
+
+      await user2.save();
+
+      // ADMIN MESSAGE
+      await ctx.telegram.sendMessage(
+        ADMIN_ID,
+
+`💸 New Withdraw Request
+
+👤 User:
+${ctx2.from.first_name}
+
+🆔 ID:
+${ctx2.from.id}
+
+💰 Amount:
+${amount}
+
+🏦 UPI:
+${upi}`
+      );
+
+      ctx2.reply(
+`✅ Withdraw Request Sent
+
+⏳ Wait For Admin Approval`
+      );
+
+    } catch (err) {
+
+      console.log(err);
+
+      ctx2.reply(
+        "❌ Withdraw Failed"
       );
     }
-
-    ctx.reply(
-`💸 Send Your UPI ID`
-    );
   });
+});
 
   // ADMIN
   bot.command("admin", async (ctx) => {
